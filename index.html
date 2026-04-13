@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<title>flappy Piotrus</title>
+<style>
+    body
+     {
+        margin:0;
+        background:#000; 
+        display:flex;
+        justify-content:center; 
+        align-items:center; 
+        height:100vh; 
+        font-family:Arial; 
+     }
+
+    canvas {
+         background:#71c5ee; 
+         border:3px solid #333; 
+         box-shadow: 0 0 20px rgba(0,0,0,0.5); 
+    }
+    #startScreen, #gameOver { position:absolute; color:white; text-align:center; pointer-events:none; }
+    h1 { margin:10px; font-size:48px; text-shadow: 4px 4px #000; }
+    p { font-size:22px; margin:5px; }
+</style>
+</head>
+<body>
+
+<div id="startScreen">
+    <h1>cwel piotrek</h1>
+    <p>Kliknij lub spacja → start</p>
+</div>
+
+<canvas id="game" width="420" height="620"></canvas>
+
+<div id="gameOver" style="display:none;">
+    <h1>Game Over</h1>
+    <p>Twój wynik: <span id="scoreText">0</span></p>
+    <p>Naciśnij SPACJĘ, żeby zagrać jeszcze raz</p>
+</div>
+
+<script>
+// ============== USTAWIENIA - ŁATWA WERSJA ==============
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+
+const GRAVITY = 0.25;      // było 0.5 → teraz dużo wolniej spada
+const JUMP = -8;           // było -12 → delikatniejszy skok
+const PIPE_WIDTH = 70;     // szersze rury
+const PIPE_GAP = 220;      // dużo większa dziura między rurami
+const PIPE_SPEED = 1.6;    // wolniejsze rury
+const PIPE_FREQUENCY = 110; // rury pojawiają się rzadziej
+
+// Twoje zdjęcie (zmień nazwę pliku jeśli inna)
+let birdImg = new Image();
+birdImg.src = "piotrus.jpg";   // ←←← ZMIEŃ NA NAZWĘ SWOJEGO PLIKU
+
+const jumpSound = new Audio('cwel.mp3'); 
+// Jeśli masz własny dźwięk w folderze: new Audio('skok.mp3');
+
+let bird = { x: 90, y: 250, velocity: 0, size: 48 }; // trochę większy ptak
+let pipes = [];
+let score = 0;
+let gameRunning = false;
+let frame = 0;
+
+function drawBackground() {
+    ctx.fillStyle = "#71c5ee";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    
+    ctx.fillStyle = "#ded895";
+    ctx.fillRect(0, canvas.height - 60, canvas.width, 60);
+}
+
+function drawBird() {
+    ctx.save();
+    ctx.translate(bird.x + bird.size/2, bird.y + bird.size/2);
+    const angle = Math.min(Math.max(bird.velocity * 3, -25), 70);
+    ctx.rotate(angle * Math.PI / 180);
+    ctx.drawImage(birdImg, -bird.size/2, -bird.size/2, bird.size, bird.size);
+    ctx.restore();
+}
+
+function updateBird() {
+    bird.velocity += GRAVITY;
+    bird.y += bird.velocity;
+    
+    if (bird.y + bird.size > canvas.height - 60 || bird.y < -20) {
+        gameOver();
+    }
+}
+
+function generatePipe() {
+    if (frame % PIPE_FREQUENCY === 0) {
+        const minHeight = 80;
+        const maxHeight = canvas.height - PIPE_GAP - 140;
+        const topHeight = Math.floor(Math.random() * (maxHeight - minHeight) + minHeight);
+        
+        pipes.push({
+            x: canvas.width,
+            top: topHeight,
+            passed: false
+        });
+    }
+}
+
+function updatePipes() {
+    for (let i = pipes.length - 1; i >= 0; i--) {
+        pipes[i].x -= PIPE_SPEED;
+        
+        if (!pipes[i].passed && pipes[i].x + PIPE_WIDTH < bird.x) {
+            pipes[i].passed = true;
+            score++;
+        }
+        
+        if (pipes[i].x + PIPE_WIDTH < -50) {
+            pipes.splice(i, 1);
+        }
+    }
+}
+
+function drawPipes() {
+    ctx.fillStyle = "#5cb85c";
+    for (let pipe of pipes) {
+        ctx.fillRect(pipe.x, 0, PIPE_WIDTH, pipe.top);
+        ctx.fillRect(pipe.x, pipe.top + PIPE_GAP, PIPE_WIDTH, canvas.height);
+        
+        // daszki
+        ctx.fillStyle = "#4a9c4a";
+        ctx.fillRect(pipe.x - 4, pipe.top - 25, PIPE_WIDTH + 8, 30);
+        ctx.fillRect(pipe.x - 4, pipe.top + PIPE_GAP - 5, PIPE_WIDTH + 8, 30);
+        ctx.fillStyle = "#5cb85c";
+    }
+}
+
+function checkCollision() {
+    for (let pipe of pipes) {
+        if (
+            bird.x + bird.size - 8 > pipe.x && bird.x + 8 < pipe.x + PIPE_WIDTH &&   // trochę luzu
+            (bird.y + 8 < pipe.top || bird.y + bird.size - 8 > pipe.top + PIPE_GAP)
+        ) {
+            gameOver();
+            return;
+        }
+    }
+}
+
+function gameLoop() {
+    if (!gameRunning) return;
+    
+    frame++;
+    
+    drawBackground();
+    updateBird();
+    drawBird();
+    
+    generatePipe();
+    updatePipes();
+    drawPipes();
+    
+    checkCollision();
+    
+    // Wynik
+    ctx.fillStyle = "white";
+    ctx.font = "bold 56px Arial";
+    ctx.textAlign = "center";
+    ctx.shadowColor = "black";
+    ctx.shadowBlur = 8;
+    ctx.fillText(score, canvas.width/2, 90);
+    ctx.shadowBlur = 0;
+    
+    requestAnimationFrame(gameLoop);
+}
+
+function jump() {
+    if (!gameRunning) return;
+    bird.velocity = JUMP;
+    jumpSound.currentTime = 0;
+    jumpSound.play();
+}
+
+function startGame() {
+    document.getElementById('startScreen').style.display = 'none';
+    document.getElementById('gameOver').style.display = 'none';
+    
+    bird.y = 250;
+    bird.velocity = 0;
+    pipes = [];
+    score = 0;
+    frame = 0;
+    gameRunning = true;
+    
+    gameLoop();
+}
+
+function gameOver() {
+    gameRunning = false;
+    document.getElementById('scoreText').textContent = score;
+    document.getElementById('gameOver').style.display = 'block';
+}
+
+// Sterowanie
+document.addEventListener('keydown', e => {
+    if (e.code === "Space") {
+        e.preventDefault();
+        if (!gameRunning) startGame();
+        else jump();
+    }
+});
+
+canvas.addEventListener('click', () => {
+    if (gameRunning) jump();
+    else startGame();
+});
+
+birdImg.onload = () => {
+    // Gra gotowa do startu
+};
+</script>
+
+</body>
+</html>
